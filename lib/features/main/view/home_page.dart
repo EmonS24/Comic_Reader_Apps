@@ -1,4 +1,3 @@
-// lib/features/main/view/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:manga/core/constant/colors.dart';
 import 'package:manga/features/main/view_model/home_viewmodel.dart';
@@ -8,7 +7,7 @@ import 'package:manga/features/widgets/book_card.dart';
 import 'package:manga/data/models/manga.dart';
 import 'package:manga/features/manga_detail/view/manga_detail_page.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   final HomeViewModel homeViewModel;
   final List<Manga> bookmarkedManga;
   final List<Manga> allManga;
@@ -21,49 +20,178 @@ class HomePage extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  _HomePageState createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Manga> _filteredManga = [];
+  bool _showDropdown = false;
+  bool _isSearching = false; // Track if search bar is open
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredManga = widget.allManga;
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      String searchQuery = _searchController.text.toLowerCase();
+      _filteredManga = widget.allManga
+          .where((manga) => manga.title.toLowerCase().contains(searchQuery))
+          .toList();
+      _showDropdown = searchQuery.isNotEmpty && _filteredManga.isNotEmpty;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.mainColor,
       appBar: AppBar(
         backgroundColor: AppColors.mainColor,
         elevation: 0,
-        title: _buildSearchBar(),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildContinueReadingSection(context),
-              _buildForYouSection(context),
-              _buildAllBooksSection(context),
-            ],
+        title: _isSearching ? _buildSearchBar() : Text('NOW', style: TextStyle(color: AppColors.textColor)),
+        actions: [
+          if (!_isSearching)
+            IconButton(
+              icon: Icon(Icons.search, color: AppColors.secondaryColor),
+              onPressed: () {
+                setState(() {
+                  _isSearching = true;
+                });
+              },
+            ),
+          IconButton(
+            icon: Icon(Icons.shopping_cart, color: AppColors.secondaryColor),
+            onPressed: () {
+              // Implement cart functionality
+            },
           ),
-        ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          _buildMainContent(context),
+          if (_showDropdown) _buildSearchDropdown(context),
+        ],
       ),
     );
   }
 
   Widget _buildSearchBar() {
-    return TextField(
-      decoration: InputDecoration(
-        hintText: 'Search Manga...',
-        hintStyle: TextStyle(color: AppColors.subTextColor),
-        prefixIcon: Icon(Icons.search, color: AppColors.subTextColor),
-        filled: true,
-        fillColor: Colors.grey[900],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
-          borderSide: BorderSide.none,
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search Manga...',
+              hintStyle: TextStyle(color: AppColors.subTextColor),
+              filled: true,
+              fillColor: Colors.grey[900],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(30),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            style: TextStyle(color: AppColors.textColor),
+          ),
+        ),
+        IconButton(
+          icon: Icon(Icons.close, color: AppColors.subTextColor),
+          onPressed: () {
+            setState(() {
+              _isSearching = false;
+              _showDropdown = false;
+              _searchController.clear();
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchDropdown(BuildContext context) {
+    return Positioned(
+      top: kToolbarHeight - 50, // Position below the AppBar
+      left: 16,
+      right: 16,
+      child: Material(
+        color: AppColors.mainColor,
+        elevation: 5,
+        borderRadius: BorderRadius.circular(10),
+        child: ListView.builder(
+          padding: EdgeInsets.zero,
+          shrinkWrap: true,
+          itemCount: _filteredManga.length,
+          itemBuilder: (context, index) {
+            final manga = _filteredManga[index];
+            return ListTile(
+              leading: Image.asset(
+                manga.coverImage,
+                width: 50,
+                height: 75,
+                fit: BoxFit.cover,
+              ),
+              title: Text(
+                manga.title,
+                style: TextStyle(color: AppColors.textColor),
+              ),
+              subtitle: Text(
+                'Chapter: ${manga.chapter}',
+                style: TextStyle(color: AppColors.subTextColor),
+              ),
+              onTap: () {
+                setState(() {
+                  _showDropdown = false;
+                  _isSearching = false;
+                });
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MangaDetailPage(
+                      manga: manga,
+                      initialChapterIndex: manga.chapter - 1,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
         ),
       ),
-      style: TextStyle(color: AppColors.textColor),
+    );
+  }
+
+
+  Widget _buildMainContent(BuildContext context) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildContinueReadingSection(context),
+            _buildForYouSection(context),
+            _buildAllBooksSection(context),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildContinueReadingSection(BuildContext context) {
-    final manga = homeViewModel.lastReadManga;
+    final manga = widget.homeViewModel.lastReadManga;
 
     if (manga == null) {
       return Container();
@@ -77,70 +205,60 @@ class HomePage extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 100,
-                  height: 150,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    image: DecorationImage(
-                      image: AssetImage(manga.coverImage),
-                      fit: BoxFit.cover,
+            Container(
+              width: 100,
+              height: 150,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                image: DecorationImage(
+                  image: AssetImage(manga.coverImage),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    manga.title,
+                    style: TextStyle(color: AppColors.textColor, fontSize: 24),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    'Chapter: ${manga.chapter}',
+                    style: TextStyle(color: AppColors.subTextColor),
+                  ),
+                  SizedBox(height: 10),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.secondaryColor,
+                      foregroundColor: AppColors.mainColor,
                     ),
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-
-                      SizedBox(height: 10),
-                      Text(
-                        manga.title,
-                        style: TextStyle(color: AppColors.textColor, fontSize: 24),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        'Chapter: ${manga.chapter}',
-                        style: TextStyle(color: AppColors.subTextColor),
-                      ),
-                      SizedBox(height: 10),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.secondaryColor,
-                          foregroundColor: AppColors.mainColor,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChapterDetailPage(
+                            chapterTitle: 'Chapter ${manga.chapter}: ${manga.title}',
+                          ),
                         ),
-                        onPressed: () {
-                          // Navigate to ChapterDetailPage with current chapter info
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChapterDetailPage(
-                                chapterTitle: 'Chapter ${manga.chapter}: ${manga.title}',
-                              ),
-                            ),
-                          );
-                        },
-                        child: Text("Continue"),
-                      ),
-                    ],
+                      );
+                    },
+                    child: Text("Continue"),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
-
-
 
   Widget _buildForYouSection(BuildContext context) {
     return Padding(
@@ -158,8 +276,8 @@ class HomePage extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (context) => BookmarksPage(
-                        bookmarkedManga: bookmarkedManga,
-                        homeViewModel: homeViewModel,
+                        bookmarkedManga: widget.bookmarkedManga,
+                        homeViewModel: widget.homeViewModel,
                       ),
                     ),
                   );
@@ -173,9 +291,9 @@ class HomePage extends StatelessWidget {
             height: 300,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: bookmarkedManga.length,
+              itemCount: widget.bookmarkedManga.length,
               itemBuilder: (context, index) {
-                final manga = bookmarkedManga[index];
+                final manga = widget.bookmarkedManga[index];
                 return Container(
                   width: 200,
                   child: BookCard(
@@ -184,7 +302,7 @@ class HomePage extends StatelessWidget {
                     coverImage: manga.coverImage,
                     isBookmarked: manga.isBookmarked,
                     onBookmarkToggle: () {
-                      homeViewModel.toggleBookmark(manga);
+                      widget.homeViewModel.toggleBookmark(manga);
                     },
                     onTap: () {
                       Navigator.push(
@@ -192,7 +310,7 @@ class HomePage extends StatelessWidget {
                         MaterialPageRoute(
                           builder: (context) => MangaDetailPage(
                             manga: manga,
-                            initialChapterIndex: manga.chapter - 1, // Pass initialChapterIndex
+                            initialChapterIndex: manga.chapter - 1,
                           ),
                         ),
                       );
@@ -222,7 +340,7 @@ class HomePage extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => AllBooksPage(allManga: allManga),
+                      builder: (context) => AllBooksPage(allManga: widget.allManga),
                     ),
                   );
                 },
@@ -235,9 +353,9 @@ class HomePage extends StatelessWidget {
             height: 300,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: allManga.length,
+              itemCount: widget.allManga.length,
               itemBuilder: (context, index) {
-                final manga = allManga[index];
+                final manga = widget.allManga[index];
                 return Container(
                   width: 200,
                   child: BookCard(
@@ -246,7 +364,7 @@ class HomePage extends StatelessWidget {
                     coverImage: manga.coverImage,
                     isBookmarked: manga.isBookmarked,
                     onBookmarkToggle: () {
-                      homeViewModel.toggleBookmark(manga);
+                      widget.homeViewModel.toggleBookmark(manga);
                     },
                     onTap: () {
                       Navigator.push(
@@ -254,7 +372,7 @@ class HomePage extends StatelessWidget {
                         MaterialPageRoute(
                           builder: (context) => MangaDetailPage(
                             manga: manga,
-                            initialChapterIndex: manga.chapter - 1, // Pass initialChapterIndex
+                            initialChapterIndex: manga.chapter - 1,
                           ),
                         ),
                       );
@@ -268,5 +386,4 @@ class HomePage extends StatelessWidget {
       ),
     );
   }
-
 }
